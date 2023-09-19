@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use foldr" #-}
 module Scavenge where
 import Dictionaries
 import Data.List (sort)
@@ -9,7 +11,7 @@ import Debug.Trace
 type Hand = [Char]
 type Move = String
 type Play = [Move]
-type Dictionary = [String] 
+type Dictionary = [String]
 
 -- All undefined values and functions should be completed. Your code will compile and test 
 -- (with the --test flag) even if some functions are left undefined.
@@ -22,90 +24,92 @@ type Dictionary = [String]
 -- A helper function may be useful.
 score :: Move -> Integer
 score [] = 0
-sscore (x:xs) = case x of
-    'A' -> 1
-    'E' -> 1
-    'I' -> 1
-    'O' -> 1
-    'U' -> 1
-    'L' -> 1
-    'N' -> 1
-    'S' -> 1
-    'T' -> 1
-    'R' -> 1
-    'D' -> 2
-    'G' -> 2
-    'B' -> 3
-    'C' -> 3
-    'M' -> 3
-    'P' -> 3
-    'F' -> 4
-    'H' -> 4
-    'V' -> 4
-    'W' -> 4
-    'Y' -> 4
-    'K' -> 5
-    'J' -> 8
-    'X' -> 8
-    'Q' -> 10
-    'Z' -> 10
-    _   -> error "Blank letter not valid"
+score (x:xs) = case x of
+    _ | x `elem` "AEIOULNSTR" -> 1
+      | x `elem` "DG"         -> 2
+      | x `elem` "BCMP"       -> 3
+      | x `elem` "FHVWY"      -> 4
+      | x `elem` "K"          -> 5
+      | x `elem` "JX"         -> 8
+      | x `elem` "QZ"         -> 10
+      | otherwise             -> error "No letter"
   + score xs
-
-
-
 
 -- score "QA" == 11
 -- score "JF" == 12
 
 -- scorePlay takes a play and returns the total score of all words.
 scorePlay :: Play -> Integer
-scorePlay = undefined 
+scorePlay [] = 0
+scorePlay (x:xs) = score x + scorePlay xs
 -- scorePlay ["KB", "QA"] == 19 
 
 -- remove takes an element and a list, and returns the list with one copy of that element removed.
 -- You should not assume the list is sorted. If there are multiple copies of the element in the list,
 -- only remove one of them. If the element doesn't occur, you should throw an error.
-remove :: Eq a => a -> [a] -> [a]   
-remove = undefined
+remove :: Eq a => a -> [a] -> [a]
+remove _ [] = error "Element not found"
+remove y (x:xs)
+    | y == x = xs
+     | otherwise = x : remove y xs
+
+
+
 -- remove 7 [7,3,1,7,5] = [3,1,7,5] 
 -- The order here doesn't matter, if you remove the second 7 it is okay.
 
 -- updateHand should take a hand (a list of characters), and a move (a string), and return the hand
 -- that remains after that move is played.
 updateHand :: Hand -> Move -> Hand
-updateHand = undefined
--- updateHand "HELLO" "LO" = "HEL"
+updateHand hand [] = hand
+updateHand hand (x:xs) = updateHand (remove x hand) xs
 
 -- canMake takes a hand and a move, and tells you if that move can be made with that hand. Be sure to
 -- consider the possibility that a letter may occur more times in the move than it does in the hand.
 canMake :: Hand -> Move -> Bool
-canMake = undefined
--- "DNAHTSET" `canMake` "HAND" = True 
--- "DNAHTSET" `canMake` "HAAND" = False
--- For full credit, this must run in near-linear time (n log n is sufficient)
+canMake _ [] = True
+canMake [] _ = False
+canMake (x:xs) letters
+    | x `elem` letters = canMake (remove x (x:xs)) (remove x letters)
+    | otherwise = canMake xs letters
 
 -- isValidMove tests if a move is valid with respect to a dictionary and hand: 
 -- the move must be a word in the dictionary and a move that can be made with the hand.
 isValidMove :: Dictionary -> Hand -> Move -> Bool
-isValidMove = undefined
--- isValidMove tinyDict "MKEKIOCHAUX" "MAKE" = TRUE
--- isValidMove tinyDict "MKEKIOCHAUX" "MAXKE" = FALSE
--- isValidMove tinyDict "MKEKIOCHAUX" "FAKE" = FALSE
+isValidMove [] hand move = False
+isValidMove (x:xs) playerHand move =
+    if x == move
+        then canMake playerHand x
+        else isValidMove xs playerHand move 
 
 -- isValidPlay checks if a play is valid. Each move in the play must be a word in the dictionary, and
 -- must be playable using whatever remains of the hand after all previous moves have been made.
 isValidPlay :: Dictionary -> Hand -> Play -> Bool
-isValidPlay = undefined
+isValidPlay _ _ [] = True 
+isValidPlay dictionary playerHand (move:remainingMoves) =
+    isValidMove dictionary playerHand move && isValidPlay dictionary (updateHand playerHand move) remainingMoves
 -- isValidPlay tinyDict "TMAKE" ["TAKE"] = TRUE
 -- isValidPlay tinyDict "TMAKE" ["MAKE"] = TRUE
 -- isValidPlay tinyDict "TMAKE" ["TAKE","MAKE"] = False
-    
+
 -- validMoves: takes a dictionary and a hand, and returns all words that can be
 -- created by letters in the hand. Order does not matter.
 validMoves :: Dictionary -> Hand -> [Move]
-validMoves = undefined
--- validMoves shortDict "PEMDOVZIJM" = ["DIE","DO","I","ME","MOVE","MOVIE","PM"]
+validMoves [] hand = []
+validMoves dict [] = []
+validMoves (x:xs) playerHand = 
+    if canMake playerHand x
+        then x:(validMoves xs playerHand)
+        else validMoves xs playerHand
+
+-- -- Main function for generating valid moves without higher-order functions.
+-- generateMoves :: Dictionary -> Hand -> Move -> [Move]
+-- generateMoves _ [] _ = []  -- No more combinations can be formed.
+-- generateMoves dict hand prevMove =
+--     -- let validMovesWithPrev = [prevMove ++ [c] | c <- hand, isValidMove dict hand (prevMove ++ [c])]
+--     --     restMoves = concat [generateMoves dict (remove c hand) (prevMove ++ [c]) | c <- hand]
+--     -- in validMovesWithPrev ++ restMoves
+
 
 --                                  End of Milestone!
 
@@ -123,7 +127,7 @@ greedyPlay = undefined
 -- You are going to search for the best play, instead of just choosing the best move one at a time.
 -- To do so, you will consider every possible play, by considering every possible combination of
 -- words. You will implement two variants. 
- 
+
 -- powerset: return the powerset of the input, i.e. the list of all sub-lists.
 -- You may assume the list has no duplicates. 
 -- The output should not have duplicates, up to sorting.
@@ -159,5 +163,5 @@ smartBrutePlay = undefined
 -- For this algorithm, start with the list of valid moves. Then, for each move find the
 -- best play for the remaining hand. Select the hand that leads to the best overall score, counting both
 -- the score of the move and the score of the best remaining play.
-bestPlay:: Dictionary -> Hand -> Play 
+bestPlay:: Dictionary -> Hand -> Play
 bestPlay = undefined
