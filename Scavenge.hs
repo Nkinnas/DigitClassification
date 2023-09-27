@@ -24,16 +24,15 @@ type Dictionary = [String]
 -- A helper function may be useful.
 score :: Move -> Integer
 score [] = 0
-score (x:xs) = case x of
-    _ | x `elem` "AEIOULNSTR" -> 1
-      | x `elem` "DG"         -> 2
-      | x `elem` "BCMP"       -> 3
-      | x `elem` "FHVWY"      -> 4
-      | x `elem` "K"          -> 5
-      | x `elem` "JX"         -> 8
-      | x `elem` "QZ"         -> 10
-      | otherwise             -> error "No letter"
-  + score xs
+score (x:xs) 
+    | x `elem` "AEIOULNSTR" = 1 + score xs
+    | x `elem` "DG"         = 2 + score xs
+    | x `elem` "BCMP"       = 3 + score xs
+    | x `elem` "FHVWY"      = 4 + score xs
+    | x `elem` "K"          = 5 + score xs
+    | x `elem` "JX"         = 8 + score xs
+    | x `elem` "QZ"         = 10 + score xs
+    | otherwise             = error "No letter"
 
 -- score "QA" == 11
 -- score "JF" == 12
@@ -66,12 +65,29 @@ updateHand hand (x:xs) = updateHand (remove x hand) xs
 
 -- canMake takes a hand and a move, and tells you if that move can be made with that hand. Be sure to
 -- consider the possibility that a letter may occur more times in the move than it does in the hand.
+-- canMake :: Hand -> Move -> Bool
+-- canMake _ [] = True
+-- canMake [] _ = False
+-- canMake (x:xs) letters
+--     | x `elem` letters = canMake (remove x (x:xs)) (remove x letters)
+--     | otherwise = canMake xs letters
+
+help_canMake :: Hand -> Move -> Bool
+help_canMake [] [] = True
+help_canMake _ [] = True
+help_canMake [] _ = False
+help_canMake (x:xs) (y:ys)
+    | y == x = help_canMake xs ys
+    | otherwise = help_canMake xs (y:ys)
+
+
 canMake :: Hand -> Move -> Bool
-canMake _ [] = True
-canMake [] _ = False
-canMake (x:xs) letters
-    | x `elem` letters = canMake (remove x (x:xs)) (remove x letters)
-    | otherwise = canMake xs letters
+canMake hand [] = True
+canMake [] moves = False
+canMake hand moves@(x:xs) = 
+    let sortedHand = sort hand
+        sortedMove = sort moves
+    in help_canMake sortedHand sortedMove
 
 -- isValidMove tests if a move is valid with respect to a dictionary and hand: 
 -- the move must be a word in the dictionary and a move that can be made with the hand.
@@ -102,14 +118,6 @@ validMoves (x:xs) playerHand =
         then x:(validMoves xs playerHand)
         else validMoves xs playerHand
 
--- -- Main function for generating valid moves without higher-order functions.
--- generateMoves :: Dictionary -> Hand -> Move -> [Move]
--- generateMoves _ [] _ = []  -- No more combinations can be formed.
--- generateMoves dict hand prevMove =
---     -- let validMovesWithPrev = [prevMove ++ [c] | c <- hand, isValidMove dict hand (prevMove ++ [c])]
---     --     restMoves = concat [generateMoves dict (remove c hand) (prevMove ++ [c]) | c <- hand]
---     -- in validMovesWithPrev ++ restMoves
-
 
 --                                  End of Milestone!
 
@@ -120,7 +128,18 @@ validMoves (x:xs) playerHand =
 -- greedyPlay: choose the best move you can at any given point in time, then check to see what
 -- other moves you can make.
 greedyPlay :: Dictionary -> Hand -> Play
-greedyPlay = undefined
+greedyPlay dict [] = []
+greedyPlay dict [x]
+    | validMoves dict [] == [] = []
+    | otherwise = validMoves dict [x]
+greedyPlay dict hand
+    | ifValid == [] = []
+    | otherwise =
+        let best_possibleWord = snd (maximum [(score x, x) | x <- ifValid])
+            updatedHand = updateHand hand best_possibleWord
+        in best_possibleWord : greedyPlay dict updatedHand
+    where
+        ifValid = validMoves dict hand
 -- greedyPlay shortDict "CLOSEFLOOR" = ["FORCE", "SO"] 
 
 -- --- Brute Force Algorithms
@@ -132,7 +151,10 @@ greedyPlay = undefined
 -- You may assume the list has no duplicates. 
 -- The output should not have duplicates, up to sorting.
 powerset :: [a] -> [[a]]
-powerset = undefined
+powerset [] = [[]]
+powerset (x:xs) = 
+    let power = powerset xs
+    in [x:sub | sub <-power] ++ power
 -- powerset [1,2] = [[],[1],[1,2],[2]]
 -- It is acceptable to have [2,1] INSTEAD of [1,2], but not in addition.
 -- length (powerset "abcde") = 32
@@ -141,15 +163,34 @@ powerset = undefined
 -- the dictionary: the powerset of the dictionary. It will only work with very small
 -- dictionaries, like tenWords.  You will then choose the best valid play out of that list.
 naiveBrutePlay :: Dictionary -> Hand -> Play
-naiveBrutePlay = undefined
+naiveBrutePlay dict hand = foldl findBestValidPlay [] (powerset dict)
+  where
+    findBestValidPlay maxPlay play =
+        if isValidPlay dict hand play && scorePlay play >= scorePlay maxPlay
+        then play
+        else maxPlay
 
+ 
 -- The Smart Brute Force approach realizes that we can restrict the size of the dictionary
 -- before we compute the powerset. There are probably MANY moves in the dictionary that we can't
 -- create at all! So, first find all the moves that can be made with this hand. Then, take the
 -- powerset of that restricted list to create a list of all plays made up of those moves. Then
 -- find the best valid play from that list.
 smartBrutePlay :: Dictionary -> Hand -> Play
-smartBrutePlay = undefined
+smartBrutePlay dict hand = findBestValidPlay (generatePowerset validMoves) []
+    where
+        validMoves = [move | move <- dict, canMake hand move]
+
+        generatePowerset [] = [[]]
+        generatePowerset (x:xs) =
+            let restPowerset = generatePowerset xs
+            in [x:sub | sub <- restPowerset] ++ restPowerset
+
+        findBestValidPlay [] maxPlay = maxPlay
+        findBestValidPlay (play:plays) maxPlay =
+            if isValidPlay dict hand play && scorePlay play >= scorePlay maxPlay
+            then findBestValidPlay plays play
+            else findBestValidPlay plays maxPlay
 
 
 
@@ -163,5 +204,24 @@ smartBrutePlay = undefined
 -- For this algorithm, start with the list of valid moves. Then, for each move find the
 -- best play for the remaining hand. Select the hand that leads to the best overall score, counting both
 -- the score of the move and the score of the best remaining play.
-bestPlay:: Dictionary -> Hand -> Play
-bestPlay = undefined
+
+bestPlay:: Dictionary -> Hand -> Play 
+bestPlay [] _ = []
+bestPlay _ [] = []
+bestPlay dict hand@(x:xs)
+  | null valid = []
+  | otherwise = bestScore plays []
+  where
+    valid = validMoves dict hand
+    updateHandForMove = [(x, updateHand hand x) | x <- valid]
+    plays = [y : bestPlay valid hand | (y, hand) <- updateHandForMove]
+
+bestScore :: [Play] -> Play -> Play
+bestScore [] plays = plays
+bestScore (x:xs) plays = bestScore' (scorePlay x) (scorePlay plays)
+  where
+    bestScore' score_currentPlay maxScore
+      | score_currentPlay > maxScore = bestScore xs x
+      | otherwise = bestScore xs plays
+
+
